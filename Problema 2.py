@@ -12,8 +12,8 @@ class MapaNode:
 class deepSearch(object):
     def run(self, mapa, start, end):
         mapa = mapa.astype(float)
-        startNode = MapaNode(start[::-1])
-        endNode = MapaNode(end[::-1])
+        startNode = MapaNode(start)
+        endNode = MapaNode(end)
         path = []
         pila = [startNode]
         mapaRows, mapaCols = np.shape(mapa)
@@ -24,10 +24,10 @@ class deepSearch(object):
                 break
             
             movements = [
-                [0, -1, 1],
-                [-1, 0, 1],
-                [1, 0, 1],
-                [0, 1, 1]
+                [0, -1],
+                [-1, 0],
+                [1, 0],
+                [0, 1]
             ]
             
             for movement in movements:
@@ -46,13 +46,13 @@ class deepSearch(object):
         while currentNode is not None:
             path.append(currentNode.position)
             currentNode = currentNode.parent
-        return path, visited
+        return path[::-1], visited
 
 class breadthSearch(object):
     def run(self, mapa, start, end):
         mapa = mapa.astype(float)
-        startNode = MapaNode(start[::-1])
-        endNode = MapaNode(end[::-1])
+        startNode = MapaNode(start)
+        endNode = MapaNode(end)
         path = []
         queue = [startNode]
         mapaRows, mapaCols = np.shape(mapa)
@@ -64,10 +64,10 @@ class breadthSearch(object):
                 break
             
             movements = [
-                [0, -1, 1],
-                [-1, 0, 1],
-                [1, 0, 1],
-                [0, 1, 1]
+                [0, -1],
+                [-1, 0],
+                [1, 0],
+                [0, 1]
             ]
             
             for movement in movements:
@@ -86,10 +86,48 @@ class breadthSearch(object):
         while currentNode is not None:
             path.append(currentNode.position)
             currentNode = currentNode.parent
-        return path, visited
+        return path[::-1], visited
+
+class iterativeDeepeningSearch(object):
+    def dfs_with_depth_limit(self, mapa, start, end, depth_limit):
+        startNode = MapaNode(start)
+        endNode = MapaNode(end)
+        stack = [(startNode, 0)]
+        visited = set()
+        mapaRows, mapaCols = np.shape(mapa)
+
+        while stack:
+            currentNode, depth = stack.pop()
+            if currentNode == endNode:
+                path = []
+                while currentNode:
+                    path.append(currentNode.position)
+                    currentNode = currentNode.parent
+                return path[::-1], visited
+
+            if depth < depth_limit:
+                if tuple(currentNode.position) not in visited:
+                    visited.add(tuple(currentNode.position))
+                    movements = [[0, -1], [-1, 0], [1, 0], [0, 1]]
+                    for movement in movements:
+                        newPosition = [currentNode.position[0] + movement[0], currentNode.position[1] + movement[1]]
+                        if (0 <= newPosition[0] < mapaRows and 0 <= newPosition[1] < mapaCols and
+                            mapa[newPosition[0]][newPosition[1]] != 0):
+                            adjacentNode = MapaNode(newPosition, currentNode)
+                            stack.append((adjacentNode, depth + 1))
+
+        return None, visited
+
+    def run(self, mapa, start, end):
+        mapa = mapa.astype(float)
+        max_depth = max(mapa.shape)
+        for depth in range(max_depth):
+            path, visited = self.dfs_with_depth_limit(mapa, start, end, depth)
+            if path:
+                return path, visited
+        return [], set()  # Path not found
 
 pg.init()
-# Cargamos el archivo de numpy que contiene el mapa
 mapaAlg = np.load('mapaProfundidad.npy')
 width, height = mapaAlg.shape
 
@@ -104,15 +142,17 @@ color_dark = (100,100,100)
 smallfont = pg.font.SysFont('comicsans', 30)
 textDFS = smallfont.render('DFS' , True , RED)
 textBFS = smallfont.render('BFS' , True , RED)
+textIDDFS = smallfont.render('IDDFS' , True , RED)
 textReset = smallfont.render('Reset' , True , RED)
 
 tile_size = 10
-start = [5, 2]
+start = [20, 2]
 goal = [40, 45]
 topPadding = 50
 
 searchDFS = deepSearch()
 searchBFS = breadthSearch()
+searchIDDFS = iterativeDeepeningSearch()
 
 screen = pg.display.set_mode((width*tile_size, height*tile_size+topPadding))
 clock = pg.time.Clock()
@@ -128,13 +168,18 @@ def draw_map():
                 color = BLACK
             else:
                 color = WHITE
-            if x == start[0] and y == start[1]:
+            if x == start[1] and y == start[0]:
                 color = GREEN
-            if x == goal[0] and y == goal[1]:
+            if x == goal[1] and y == goal[0]:
                 color = RED
             pg.draw.rect(background, color, rect)
 
-# Dibujar el mapa por primera vez
+def draw_path(path):
+    for i in range(len(path) - 1):
+        start_pos = (path[i][1] * tile_size + tile_size // 2, path[i][0] * tile_size + tile_size // 2)
+        end_pos = (path[i+1][1] * tile_size + tile_size // 2, path[i+1][0] * tile_size + tile_size // 2)
+        pg.draw.line(background, BLUE, start_pos, end_pos, 2)
+
 draw_map()
 
 game_exit = False
@@ -151,42 +196,36 @@ while not game_exit:
             if 160 <= mouse[0] <= 300 and 10 <= mouse[1] <= 40:
                 selected_algorithm = 'BFS'
             if 310 <= mouse[0] <= 450 and 10 <= mouse[1] <= 40:
-                # Al presionar "Reset", reiniciamos el mapa
+                selected_algorithm = 'IDDFS'
+            if 460 <= mouse[0] <= 600 and 10 <= mouse[1] <= 40:
                 draw_map()
                 selected_algorithm = None
             
             if selected_algorithm:
+                draw_map()  # Reset the map before drawing new path
                 if selected_algorithm == 'DFS':
                     camino, mapavisited = searchDFS.run(mapaAlg, start, goal)
                 elif selected_algorithm == 'BFS':
                     camino, mapavisited = searchBFS.run(mapaAlg, start, goal)
+                elif selected_algorithm == 'IDDFS':
+                    camino, mapavisited = searchIDDFS.run(mapaAlg, start, goal)
                 
-                for point in camino:
-                    rect = (point[1] * tile_size, point[0] * tile_size, tile_size, tile_size)
-                    pg.draw.rect(background, BLUE, rect)
+                if camino:
+                    draw_path(camino)
     
-    # Cambiamos el color del botón según la posición del mouse
-    if 10 <= mouse[0] <= 150 and 10 <= mouse[1] <= 40:
-        pg.draw.rect(buttons, color_light, [10, 10, 140, 30])
-    else:
-        pg.draw.rect(buttons, color_dark, [10, 10, 140, 30])
-
-    if 160 <= mouse[0] <= 300 and 10 <= mouse[1] <= 40:
-        pg.draw.rect(buttons, color_light, [160, 10, 140, 30])
-    else:
-        pg.draw.rect(buttons, color_dark, [160, 10, 140, 30])
-
-    if 310 <= mouse[0] <= 450 and 10 <= mouse[1] <= 40:
-        pg.draw.rect(buttons, color_light, [310, 10, 140, 30])
-    else:
-        pg.draw.rect(buttons, color_dark, [310, 10, 140, 30])
+    # Update button colors
+    pg.draw.rect(buttons, color_light if 10 <= mouse[0] <= 150 and 10 <= mouse[1] <= 40 else color_dark, [10, 10, 140, 30])
+    pg.draw.rect(buttons, color_light if 160 <= mouse[0] <= 300 and 10 <= mouse[1] <= 40 else color_dark, [160, 10, 140, 30])
+    pg.draw.rect(buttons, color_light if 310 <= mouse[0] <= 450 and 10 <= mouse[1] <= 40 else color_dark, [310, 10, 140, 30])
+    pg.draw.rect(buttons, color_light if 460 <= mouse[0] <= 600 and 10 <= mouse[1] <= 40 else color_dark, [460, 10, 140, 30])
 
     screen.fill((0, 0, 0))
     screen.blit(buttons, (0, 0))
     screen.blit(background, (0, 50))
     screen.blit(textDFS, (10, 10))
     screen.blit(textBFS, (160, 10))
-    screen.blit(textReset, (310, 10))
+    screen.blit(textIDDFS, (310, 10))
+    screen.blit(textReset, (460, 10))
     pg.display.flip()
     clock.tick(30)
 
