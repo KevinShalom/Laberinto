@@ -19,7 +19,7 @@ class deepSearch(object):
         mapaRows, mapaCols = np.shape(mapa)
         visited = np.zeros(mapa.shape)
         while len(pila) != 0:
-            currentNode = pila.pop(0)
+            currentNode = pila.pop()  # Cambiado de pop(0) a pop() para DFS
             if currentNode == endNode:
                 break
             
@@ -106,15 +106,14 @@ class iterativeDeepeningSearch(object):
                 return path[::-1], visited
 
             if depth < depth_limit:
-                if tuple(currentNode.position) not in visited:
-                    visited.add(tuple(currentNode.position))
-                    movements = [[0, -1], [-1, 0], [1, 0], [0, 1]]
-                    for movement in movements:
-                        newPosition = [currentNode.position[0] + movement[0], currentNode.position[1] + movement[1]]
-                        if (0 <= newPosition[0] < mapaRows and 0 <= newPosition[1] < mapaCols and
-                            mapa[newPosition[0]][newPosition[1]] != 0):
-                            adjacentNode = MapaNode(newPosition, currentNode)
-                            stack.append((adjacentNode, depth + 1))
+                movements = [[0, -1], [-1, 0], [1, 0], [0, 1]]
+                for movement in movements:
+                    newPosition = [currentNode.position[0] + movement[0], currentNode.position[1] + movement[1]]
+                    if (0 <= newPosition[0] < mapaRows and 0 <= newPosition[1] < mapaCols and
+                        mapa[newPosition[0]][newPosition[1]] != 0 and tuple(newPosition) not in visited):
+                        adjacentNode = MapaNode(newPosition, currentNode)
+                        stack.append((adjacentNode, depth + 1))
+                        visited.add(tuple(newPosition))
 
         return None, visited
 
@@ -131,102 +130,111 @@ pg.init()
 mapaAlg = np.load('mapaProfundidad.npy')
 width, height = mapaAlg.shape
 
+# Colores
 BLACK = pg.Color('black')
 WHITE = pg.Color('white')
-GREEN = pg.Color('green')
-RED = pg.Color('red')
-BLUE = pg.Color('blue')
+GREEN = pg.Color(0, 200, 0)  # Verde más brillante
+RED = pg.Color(200, 0, 0)    # Rojo más brillante
+BLUE = pg.Color(0, 100, 255) # Azul más brillante
+GRAY = pg.Color(200, 200, 200)
+DARK_GRAY = pg.Color(100, 100, 100)
 
-color_light = (170,170,170)
-color_dark = (100,100,100)
-smallfont = pg.font.SysFont('comicsans', 30)
-textDFS = smallfont.render('DFS' , True , RED)
-textBFS = smallfont.render('BFS' , True , RED)
-textIDDFS = smallfont.render('IDDFS' , True , RED)
-textReset = smallfont.render('Reset' , True , RED)
+# Fuentes
+pg.font.init()
+font = pg.font.Font(None, 30)
 
-tile_size = 10
+# Configuración de la pantalla
+TILE_SIZE = 12
+TOP_PADDING = 50
+SCREEN_WIDTH = width * TILE_SIZE
+SCREEN_HEIGHT = height * TILE_SIZE + TOP_PADDING
+screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pg.display.set_caption("Laberinto con Algoritmos de Búsqueda")
+
+# Posiciones iniciales
 start = [20, 2]
 goal = [40, 45]
-topPadding = 50
 
+# Inicialización de algoritmos
 searchDFS = deepSearch()
 searchBFS = breadthSearch()
 searchIDDFS = iterativeDeepeningSearch()
 
-screen = pg.display.set_mode((width*tile_size, height*tile_size+topPadding))
-clock = pg.time.Clock()
-
-background = pg.Surface((width*tile_size, height*tile_size))
-buttons = pg.Surface((width*tile_size, 50))
-
 def draw_map():
-    for y in range(0, height):
-        for x in range(0, width):
-            rect = (x*tile_size, y*tile_size, tile_size, tile_size)
+    for y in range(height):
+        for x in range(width):
+            rect = pg.Rect(x * TILE_SIZE, y * TILE_SIZE + TOP_PADDING, TILE_SIZE, TILE_SIZE)
             if mapaAlg[y, x] == 0:
-                color = BLACK
+                pg.draw.rect(screen, BLACK, rect)
             else:
-                color = WHITE
-            if x == start[1] and y == start[0]:
-                color = GREEN
-            if x == goal[1] and y == goal[0]:
-                color = RED
-            pg.draw.rect(background, color, rect)
+                pg.draw.rect(screen, WHITE, rect)
+            # Dibuja un borde gris para cada celda
+            pg.draw.rect(screen, GRAY, rect, 1)
+
+    # Dibujar inicio y fin con formas más atractivas
+    start_center = ((start[1] + 0.5) * TILE_SIZE, (start[0] + 0.5) * TILE_SIZE + TOP_PADDING)
+    goal_center = ((goal[1] + 0.5) * TILE_SIZE, (goal[0] + 0.5) * TILE_SIZE + TOP_PADDING)
+    pg.draw.circle(screen, GREEN, start_center, TILE_SIZE // 2)
+    pg.draw.polygon(screen, RED, [
+        (goal_center[0], goal_center[1] - TILE_SIZE // 2),
+        (goal_center[0] - TILE_SIZE // 2, goal_center[1] + TILE_SIZE // 2),
+        (goal_center[0] + TILE_SIZE // 2, goal_center[1] + TILE_SIZE // 2)
+    ])
 
 def draw_path(path):
-    for i in range(len(path) - 1):
-        start_pos = (path[i][1] * tile_size + tile_size // 2, path[i][0] * tile_size + tile_size // 2)
-        end_pos = (path[i+1][1] * tile_size + tile_size // 2, path[i+1][0] * tile_size + tile_size // 2)
-        pg.draw.line(background, BLUE, start_pos, end_pos, 2)
+    if path:
+        # Dibuja un camino más suave y atractivo
+        points = [(p[1] * TILE_SIZE + TILE_SIZE // 2, p[0] * TILE_SIZE + TILE_SIZE // 2 + TOP_PADDING) for p in path]
+        pg.draw.lines(screen, BLUE, False, points, 4)
+        
+        # Dibuja círculos en los puntos de giro para un efecto más suave
+        for point in points:
+            pg.draw.circle(screen, BLUE, point, 3)
 
-draw_map()
+def draw_button(text, x, y, w, h, color, text_color):
+    button_rect = pg.Rect(x, y, w, h)
+    pg.draw.rect(screen, color, button_rect)
+    pg.draw.rect(screen, BLACK, button_rect, 2)  # Borde del botón
+    text_surf = font.render(text, True, text_color)
+    text_rect = text_surf.get_rect(center=button_rect.center)
+    screen.blit(text_surf, text_rect)
+    return button_rect
 
-game_exit = False
-selected_algorithm = None
+def main():
+    clock = pg.time.Clock()
+    running = True
+    current_path = []
 
-while not game_exit:
-    mouse = pg.mouse.get_pos()
-    for event in pg.event.get():
-        if event.type == pg.QUIT:
-            game_exit = True
-        if event.type == pg.MOUSEBUTTONDOWN:
-            if 10 <= mouse[0] <= 150 and 10 <= mouse[1] <= 40:
-                selected_algorithm = 'DFS'
-            if 160 <= mouse[0] <= 300 and 10 <= mouse[1] <= 40:
-                selected_algorithm = 'BFS'
-            if 310 <= mouse[0] <= 450 and 10 <= mouse[1] <= 40:
-                selected_algorithm = 'IDDFS'
-            if 460 <= mouse[0] <= 600 and 10 <= mouse[1] <= 40:
-                draw_map()
-                selected_algorithm = None
-            
-            if selected_algorithm:
-                draw_map()  # Reset the map before drawing new path
-                if selected_algorithm == 'DFS':
-                    camino, mapavisited = searchDFS.run(mapaAlg, start, goal)
-                elif selected_algorithm == 'BFS':
-                    camino, mapavisited = searchBFS.run(mapaAlg, start, goal)
-                elif selected_algorithm == 'IDDFS':
-                    camino, mapavisited = searchIDDFS.run(mapaAlg, start, goal)
-                
-                if camino:
-                    draw_path(camino)
-    
-    # Update button colors
-    pg.draw.rect(buttons, color_light if 10 <= mouse[0] <= 150 and 10 <= mouse[1] <= 40 else color_dark, [10, 10, 140, 30])
-    pg.draw.rect(buttons, color_light if 160 <= mouse[0] <= 300 and 10 <= mouse[1] <= 40 else color_dark, [160, 10, 140, 30])
-    pg.draw.rect(buttons, color_light if 310 <= mouse[0] <= 450 and 10 <= mouse[1] <= 40 else color_dark, [310, 10, 140, 30])
-    pg.draw.rect(buttons, color_light if 460 <= mouse[0] <= 600 and 10 <= mouse[1] <= 40 else color_dark, [460, 10, 140, 30])
+    while running:
+        screen.fill(WHITE)
+        
+        # Dibujar botones
+        dfs_button = draw_button("DFS", 10, 10, 100, 30, DARK_GRAY, WHITE)
+        bfs_button = draw_button("BFS", 120, 10, 100, 30, DARK_GRAY, WHITE)
+        iddfs_button = draw_button("IDDFS", 230, 10, 100, 30, DARK_GRAY, WHITE)
+        reset_button = draw_button("Reset", 340, 10, 100, 30, DARK_GRAY, WHITE)
 
-    screen.fill((0, 0, 0))
-    screen.blit(buttons, (0, 0))
-    screen.blit(background, (0, 50))
-    screen.blit(textDFS, (10, 10))
-    screen.blit(textBFS, (160, 10))
-    screen.blit(textIDDFS, (310, 10))
-    screen.blit(textReset, (460, 10))
-    pg.display.flip()
-    clock.tick(30)
+        draw_map()
+        draw_path(current_path)
 
-pg.display.quit()
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                running = False
+            elif event.type == pg.MOUSEBUTTONDOWN:
+                mouse_pos = pg.mouse.get_pos()
+                if dfs_button.collidepoint(mouse_pos):
+                    current_path, _ = searchDFS.run(mapaAlg, start, goal)
+                elif bfs_button.collidepoint(mouse_pos):
+                    current_path, _ = searchBFS.run(mapaAlg, start, goal)
+                elif iddfs_button.collidepoint(mouse_pos):
+                    current_path, _ = searchIDDFS.run(mapaAlg, start, goal)
+                elif reset_button.collidepoint(mouse_pos):
+                    current_path = []
+
+        pg.display.flip()
+        clock.tick(30)
+
+    pg.quit()
+
+if __name__ == "__main__":
+    main()
